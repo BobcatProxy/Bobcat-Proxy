@@ -1223,7 +1223,7 @@ class SubscriptionDialog(QDialog):
 class XrayClient(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Bobcat Proxy 2.4 пре-релиз №2 - Прокси отключен")
+        self.setWindowTitle("Bobcat Proxy 2.5 pre1 - Прокси отключен")
         self.setFont(QFont("Arial"))
         self.setMinimumSize(950, 700)
         self.sub_manager = SubscriptionManager(KEYS_DB_PATH, SUBS_DB_PATH)
@@ -1693,7 +1693,7 @@ class XrayClient(QMainWindow):
     def show_about(self):
         QMessageBox.information(
             self, "О программе",
-            "Bobcat Proxy 2.4 \n\n"
+            "Bobcat Proxy 2.5 pre1 \n\n"
             "Клиент для Xray-core с поддержкой:\n"
             "• VLESS/VMess/Trojan/Shadowsocks\n"
             "• Автообновление подписок\n"
@@ -2119,6 +2119,19 @@ class XrayClient(QMainWindow):
                 addr_part = url_part
                 params = {}
             get = lambda n, d='': params.get(n, [d])[0]
+
+            # Проверяем allowInsecure и БЛОКИРУЕМ запуск (для особо тупых VPN провайдеров)
+            allow_insecure_param = get('allowInsecure', '0')
+            if allow_insecure_param == '1' or allow_insecure_param.lower() == 'true':
+                warning_msg = ("Из соображений безопасности соединений, запуск конфига с параметром "
+                               "allowInsecure невозможен. Поддержка этого параметра прекращена. "
+                               "Использование allowInsecure подвергает ваш трафик риску перехвата "
+                               "и компрометации. Пожалуйста, обратитесь к вашему VPN провайдеру "
+                               "для получения конфигурации без этого параметра. "
+                               "Ваш провайдер, вероятно, использует устаревшие или небезопасные методы настройки.")
+                self.log_text.append(f"🔴 {warning_msg}")
+                return False
+
             uuid_addr = addr_part.split('@')
             if len(uuid_addr) != 2:
                 raise ValueError("Invalid VLESS")
@@ -2168,6 +2181,18 @@ class XrayClient(QMainWindow):
             b64 = key_string[8:].strip()
             b64 += '=' * (-len(b64) % 4)
             vmess = json.loads(base64.b64decode(b64).decode('utf-8'))
+            
+            # Проверяем allowInsecure и БЛОКИРУЕМ запуск
+            allow_insecure = vmess.get('allowInsecure', False)
+            if allow_insecure is True or allow_insecure == '1' or allow_insecure == 1 or str(allow_insecure).lower() == 'true':
+                warning_msg = ("Из соображений безопасности соединений, запуск конфига с параметром "
+                               "allowInsecure невозможен. Поддержка этого параметра прекращена. "
+                               "Использование allowInsecure подвергает ваш трафик риску перехвата "
+                               "и компрометации. Пожалуйста, обратитесь к вашему VPN провайдеру "
+                               "для получения конфигурации без этого параметра.")
+                self.log_text.append(f"🔴 {warning_msg}")
+                return False
+            
             address = vmess.get('add', '')
             port = int(vmess.get('port', 443))
             uuid = vmess.get('id', '')
@@ -2179,8 +2204,11 @@ class XrayClient(QMainWindow):
             stream = {"network": net, "security": "tls" if vmess.get('tls') == 'tls' else "none"}
             if stream["security"] == "tls":
                 stream["tlsSettings"] = {
-                    "allowInsecure": vmess.get('allowInsecure', False) is True,
-                    "fingerprint": fp, "serverName": sni, "alpn": alpn}
+                    "allowInsecure": False,
+                    "fingerprint": fp, 
+                    "serverName": sni, 
+                    "alpn": alpn
+                }
             if net == "ws":
                 stream["wsSettings"] = {"path": vmess.get('path', '/'),
                                         "headers": {"Host": vmess.get('host', '') or sni}}
@@ -2208,6 +2236,18 @@ class XrayClient(QMainWindow):
                 addr_part = url_part
                 params = {}
             get = lambda n, d='': params.get(n, [d])[0]
+            
+            # Проверяем allowInsecure и БЛОКИРУЕМ запуск
+            allow_insecure_param = get('allowInsecure', '0')
+            if allow_insecure_param == '1':
+                warning_msg = ("Из соображений безопасности соединений, запуск конфига с параметром "
+                               "allowInsecure невозможен. Поддержка этого параметра прекращена. "
+                               "Использование allowInsecure подвергает ваш трафик риску перехвата "
+                               "и компрометации. Пожалуйста, обратитесь к вашему VPN провайдеру "
+                               "для получения конфигурации без этого параметра.")
+                self.log_text.append(f"🔴 {warning_msg}")
+                return False
+            
             auth_part, host_port = addr_part.split('@')
             password = urllib.parse.unquote(auth_part)
             if host_port.startswith('['):
@@ -2226,8 +2266,9 @@ class XrayClient(QMainWindow):
             net = get('type', 'tcp')
             path = get('path', '/')
             host = get('host', sni)
+            
             stream = {"network": net, "security": "tls",
-                      "tlsSettings": {"allowInsecure": get('allowInsecure','0')=='1',
+                      "tlsSettings": {"allowInsecure": False,
                                       "fingerprint": fp if fp else 'chrome',
                                       "serverName": sni, "alpn": alpn}}
             if net == "ws":
@@ -2396,7 +2437,7 @@ class XrayClient(QMainWindow):
         if is_active:
             self.btn_power.setText("ВЫКЛЮЧИТЬ")
             self.btn_power.setStyleSheet(self.btn_power_off_style)
-            self.setWindowTitle("Bobcat Proxy 2.4 - ВКЛЮЧЕН")
+            self.setWindowTitle("Bobcat Proxy 2.5 pre1 - ВКЛЮЧЕН")
             self.key_selector_all.setEnabled(False)
             self.key_selector_manual.setEnabled(False)
             self.key_selector_sub.setEnabled(False)
@@ -2416,7 +2457,7 @@ class XrayClient(QMainWindow):
                 QPushButton { background-color:#00F267;color:white;border-radius:75px;
                     font-size:20px;font-weight:bold;border:4px solid #27ae60; }
                 QPushButton:hover { background-color:#27ae60; }""")
-            self.setWindowTitle("Bobcat Proxy 2.4 - Прокси отключен")
+            self.setWindowTitle("Bobcat Proxy 2.5 pre1 - Прокси отключен")
             self.key_selector_all.setEnabled(True)
             self.key_selector_manual.setEnabled(True)
             self.key_selector_sub.setEnabled(True)
